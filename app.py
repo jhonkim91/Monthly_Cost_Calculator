@@ -14,6 +14,21 @@ from database import (
     load_etc_fixed, save_etc_fixed, delete_etc_fixed,
     delete_all_data
 )
+# app.py 맨 위 import 아래에 추가
+from auth import is_logged_in, get_current_user, logout
+from login_page import show_login_page
+
+# ─────────────────────────────────────────
+# 로그인 게이트 — 로그인 안 됐으면 로그인 페이지만 표시
+# ─────────────────────────────────────────
+if not is_logged_in():
+    show_login_page()
+    st.stop()  # 로그인 전엔 나머지 앱 실행 안 됨
+
+# ─────────────────────────────────────────
+# 이 아래부터는 로그인된 사용자만 접근 가능
+# ─────────────────────────────────────────
+
 # ─────────────────────────────────────────
 # 페이지 기본 설정
 # ─────────────────────────────────────────
@@ -139,6 +154,15 @@ def get_grand_total():
 # 사이드바 — 월 소득 입력
 # ─────────────────────────────────────────
 with st.sidebar:
+    # 로그인 정보 표시
+    st.markdown("## 👤 내 계정")
+    st.success(f"✅ {get_current_user()}")
+
+    if st.button("🚪 로그아웃", use_container_width=True):
+        logout()
+        st.rerun()
+
+    st.divider()
     # ... 이하 기존 사이드바 코드 유지
     st.markdown("## 🔐 사용자")
 
