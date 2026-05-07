@@ -5,7 +5,15 @@ import plotly.graph_objects as go
 from io import StringIO
 import json
 from datetime import datetime
-
+# app.py 상단 — 기존 import 아래에 추가
+from database import (
+    load_user, save_income,
+    load_loans, save_loan, update_loan, delete_loan,
+    load_utilities, save_utility, delete_utility,
+    load_subscriptions, save_subscription, delete_subscription,
+    load_etc_fixed, save_etc_fixed, delete_etc_fixed,
+    delete_all_data
+)
 # ─────────────────────────────────────────
 # 페이지 기본 설정
 # ─────────────────────────────────────────
@@ -64,6 +72,12 @@ st.markdown("""
 # 세션 상태 초기화
 # ─────────────────────────────────────────
 def init_session():
+    if "user_loaded" not in st.session_state:
+        st.session_state.user_loaded = False
+    if "current_user" not in st.session_state:
+        st.session_state.current_user = None
+    if "income" not in st.session_state:
+        st.session_state.income = 0
     if "loans" not in st.session_state:
         st.session_state.loans = []
     if "utilities" not in st.session_state:
@@ -73,10 +87,19 @@ def init_session():
         }
     if "subscriptions" not in st.session_state:
         st.session_state.subscriptions = []
-    if "income" not in st.session_state:
-        st.session_state.income = 0
     if "etc_fixed" not in st.session_state:
         st.session_state.etc_fixed = []
+
+    # 로그인된 유저가 있고 아직 DB 로드 안 했으면 불러오기
+    if st.session_state.current_user and not st.session_state.user_loaded:
+        uname = st.session_state.current_user
+        user  = load_user(uname)
+        st.session_state.income        = user.get("income", 0)
+        st.session_state.loans         = load_loans(uname)
+        st.session_state.utilities     = load_utilities(uname)
+        st.session_state.subscriptions = load_subscriptions(uname)
+        st.session_state.etc_fixed     = load_etc_fixed(uname)
+        st.session_state.user_loaded   = True
 
 init_session()
 
@@ -116,6 +139,37 @@ def get_grand_total():
 # 사이드바 — 월 소득 입력
 # ─────────────────────────────────────────
 with st.sidebar:
+    # ... 이하 기존 사이드바 코드 유지
+    st.markdown("## 🔐 사용자")
+
+    input_name = st.text_input(
+        "사용자 이름",
+        placeholder="예: hong123",
+        value=st.session_state.current_user or ""
+    )
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("📂 불러오기", type="primary", use_container_width=True):
+            if input_name.strip():
+                st.session_state.current_user = input_name.strip()
+                st.session_state.user_loaded  = False  # DB 재로드 트리거
+                st.rerun()
+            else:
+                st.error("이름을 입력해주세요!")
+    with col_b:
+        if st.button("💾 저장", use_container_width=True):
+            if st.session_state.current_user:
+                save_income(st.session_state.current_user,
+                            st.session_state.income)
+                st.success("저장 완료!")
+            else:
+                st.warning("먼저 불러오기를 눌러주세요.")
+
+    if st.session_state.current_user:
+        st.success(f"✅ {st.session_state.current_user}")
+    else:
+        st.info("이름 입력 후 불러오기를 누르세요")
     st.markdown("## 👤 기본 정보")
     name = st.text_input("이름 (선택)", placeholder="홍길동")
     month = st.selectbox("기준 월", [f"{i}월" for i in range(1, 13)],
