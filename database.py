@@ -54,11 +54,13 @@ def load_loans(user_name: str) -> list:
     return result.data or []
 
 def save_loan(user_name: str, loan: dict):
-    """대출 추가"""
     sb = get_supabase()
     sb.table(TB_LOANS).insert({
         "user_name":          user_name,
         "name":               loan["name"],
+        "lender":             loan.get("lender", ""),
+        "repay_method":       loan.get("repay_method", "원리금균등상환"),
+        "start_date":         loan.get("start_date", ""),
         "original_principal": int(loan["original_principal"]),
         "current_principal":  int(loan["current_principal"]),
         "rate":               float(loan["rate"]),

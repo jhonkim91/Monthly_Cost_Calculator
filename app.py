@@ -44,44 +44,96 @@ st.set_page_config(
 # ─────────────────────────────────────────
 st.markdown("""
 <style>
-    .main { background-color: #f8f9fa; }
-    .metric-card {
-        background: white;
-        padding: 1rem;
-        border-radius: 10px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        text-align: center;
-        margin: 5px;
+/* ── 전체 레이아웃 ── */
+.main .block-container {
+    padding: 1rem 1rem 2rem 1rem !important;
+    max-width: 100% !important;
+}
+
+/* ── 모바일 폰트 크기 ── */
+@media (max-width: 768px) {
+    h1 { font-size: 1.4rem !important; }
+    h2 { font-size: 1.2rem !important; }
+    h3 { font-size: 1.0rem !important; }
+    .metric-value { font-size: 1.2rem !important; }
+
+    /* 모바일에서 컬럼 세로 배치 */
+    [data-testid="column"] {
+        width: 100% !important;
+        flex: 100% !important;
+        min-width: 100% !important;
     }
-    .metric-value {
-        font-size: 1.8rem;
-        font-weight: bold;
-        color: #1f77b4;
+
+    /* 버튼 풀 너비 */
+    .stButton > button {
+        width: 100% !important;
+        padding: 0.6rem !important;
+        font-size: 0.95rem !important;
     }
-    .metric-label {
-        font-size: 0.9rem;
-        color: #666;
+
+    /* 입력창 여백 */
+    .stTextInput input,
+    .stNumberInput input,
+    .stSelectbox select {
+        font-size: 1rem !important;
+        padding: 0.5rem !important;
     }
-    .danger { color: #e74c3c !important; }
-    .warning { color: #f39c12 !important; }
-    .success { color: #27ae60 !important; }
-    .section-header {
-        background: linear-gradient(90deg, #1f77b4, #2ecc71);
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        margin: 1rem 0;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
+
+    /* 탭 버튼 */
     .stTabs [data-baseweb="tab"] {
-        background-color: #e8f4fd;
-        border-radius: 8px 8px 0 0;
-        font-weight: bold;
+        font-size: 0.8rem !important;
+        padding: 6px 8px !important;
     }
+
+    /* 사이드바 숨기기 옵션 */
+    [data-testid="stSidebar"] {
+        min-width: 0 !important;
+    }
+}
+
+/* ── 카드 스타일 ── */
+.metric-card {
+    background: white;
+    padding: 0.8rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    text-align: center;
+    margin: 4px;
+}
+.metric-value {
+    font-size: 1.6rem;
+    font-weight: bold;
+    color: #1f77b4;
+}
+.metric-label {
+    font-size: 0.85rem;
+    color: #888;
+}
+
+/* ── 색상 클래스 ── */
+.danger  { color: #e74c3c !important; }
+.warning { color: #f39c12 !important; }
+.success { color: #27ae60 !important; }
+
+/* ── 탭 스타일 ── */
+.stTabs [data-baseweb="tab-list"] { gap: 4px; }
+.stTabs [data-baseweb="tab"] {
+    background: #e8f4fd;
+    border-radius: 8px 8px 0 0;
+    font-weight: bold;
+}
+
+/* ── 구분선 여백 ── */
+hr { margin: 0.8rem 0 !important; }
+
+/* ── expander 스타일 ── */
+.streamlit-expanderHeader {
+    font-weight: bold;
+    font-size: 0.95rem;
+}
 </style>
 """, unsafe_allow_html=True)
+
 
 # ─────────────────────────────────────────
 # 세션 상태 초기화
@@ -362,256 +414,353 @@ with tab1:
     else:
         st.info("📝 아직 입력된 항목이 없습니다. 각 탭에서 항목을 추가해보세요!")
 
+
 # ══════════════════════════════════════════
-# TAB 2: 대출 관리 (중도 상환 포함 버전)
+# TAB 2: 대출 관리 — 전체 교체
 # ══════════════════════════════════════════
 with tab2:
     st.markdown("### 🏦 대출 관리")
-    st.caption("원리금균등상환 방식 · 중도 상환 시 잔여 원금 기준으로 자동 재계산됩니다.")
 
     # ── 대출 추가 폼 ──────────────────────────
-    with st.expander("➕ 대출 항목 추가", expanded=len(st.session_state.loans) == 0):
-        c1, c2 = st.columns(2)
-        with c1:
-            loan_name = st.text_input("대출명", placeholder="예: 주택담보대출",
-                                      key="loan_name_input")
-            loan_principal = st.number_input("최초 대출 원금 (원)", min_value=0,
-                                             step=100000, format="%d",
-                                             key="loan_principal")
-        with c2:
-            loan_rate = st.number_input("연 금리 (%)", min_value=0.0,
-                                        max_value=50.0, value=4.5,
-                                        step=0.1, format="%.2f",
-                                        key="loan_rate")
-            loan_months = st.number_input("총 상환 개월 수", min_value=1,
-                                          max_value=480, value=120,
-                                          step=1, key="loan_months")
+    with st.expander("➕ 대출 항목 추가",
+                     expanded=len(st.session_state.loans) == 0):
 
+        # 1행 — 대출명 / 금융기관
+        r1c1, r1c2 = st.columns(2)
+        with r1c1:
+            loan_name = st.text_input("대출명",
+                                      placeholder="예: 전세자금대출",
+                                      key="loan_name_input")
+        with r1c2:
+            lender_select = st.selectbox("금융기관", LENDER_LIST,
+                                          key="lender_select")
+            if lender_select == "직접입력" or lender_select.startswith("──"):
+                lender_custom = st.text_input("금융기관 직접입력",
+                                              key="lender_custom",
+                                              placeholder="예: OO캐피탈")
+                lender = lender_custom
+            else:
+                lender = lender_select
+
+        # 2행 — 상환방식 / 대출 시작일
+        r2c1, r2c2 = st.columns(2)
+        with r2c1:
+            repay_method = st.selectbox(
+                "상환 방식",
+                REPAY_METHODS,
+                key="repay_method",
+                help="원리금균등: 매월 동일 납입 | 원금균등: 초기 납입 높고 점점 감소 | 만기일시: 매월 이자만, 만기에 원금 전액"
+            )
+        with r2c2:
+            start_date = st.date_input("대출 시작일",
+                                        value=date.today(),
+                                        key="loan_start_date")
+
+        # 3행 — 원금 / 금리 / 기간
+        r3c1, r3c2, r3c3 = st.columns(3)
+        with r3c1:
+            loan_principal = st.number_input(
+                "최초 대출 원금 (원)",
+                min_value=0, step=100000, format="%d",
+                key="loan_principal"
+            )
+        with r3c2:
+            loan_rate = st.number_input(
+                "연 금리 (%)",
+                min_value=0.0, max_value=50.0,
+                value=4.5, step=0.1, format="%.2f",
+                key="loan_rate"
+            )
+        with r3c3:
+            loan_months = st.number_input(
+                "총 상환 기간 (개월)",
+                min_value=1, max_value=480,
+                value=120, step=1,
+                key="loan_months"
+            )
+
+        # 미리보기
         if loan_principal > 0:
-            preview = calc_monthly_payment(loan_principal, loan_rate, loan_months)
-            st.info(f"📌 예상 월 납입금: **{format_currency(preview)}**")
+            if repay_method == METHOD_EQUAL_PAYMENT:
+                preview = calc_equal_payment(loan_principal,
+                                              loan_rate, loan_months)
+                st.info(f"📌 월 납입금 (원리금균등): **{format_currency(preview)}**")
+
+            elif repay_method == METHOD_EQUAL_PRINCIPAL:
+                first  = calc_equal_principal(loan_principal,
+                                               loan_rate, loan_months, 1)
+                last_m = calc_equal_principal(loan_principal,
+                                               loan_rate, loan_months,
+                                               loan_months)
+                st.info(
+                    f"📌 원금균등 — "
+                    f"첫 달: **{format_currency(first['total'])}** / "
+                    f"마지막 달: **{format_currency(last_m['total'])}**"
+                )
+            else:
+                monthly_interest = calc_bullet(loan_principal, loan_rate)
+                st.info(
+                    f"📌 만기일시 — "
+                    f"매월 이자: **{format_currency(monthly_interest)}** / "
+                    f"만기 상환 원금: **{format_currency(loan_principal)}**"
+                )
 
         if st.button("✅ 대출 추가", key="add_loan", type="primary"):
             if not loan_name:
                 st.error("대출명을 입력해주세요.")
             elif loan_principal <= 0:
-                st.error("대출 잔액을 입력해주세요.")
+                st.error("대출 원금을 입력해주세요.")
             else:
-                monthly = calc_monthly_payment(loan_principal, loan_rate, loan_months)
-                st.session_state.loans.append({
-                    "name": loan_name,
-                    "original_principal": loan_principal,   # 최초 원금
-                    "current_principal": loan_principal,    # 현재 잔여 원금
-                    "rate": loan_rate,
-                    "original_months": loan_months,         # 최초 개월
-                    "remaining_months": loan_months,        # 잔여 개월
-                    "monthly_payment": monthly,
-                    "prepayments": []                        # 중도 상환 이력
-                })
-                st.success(f"✅ '{loan_name}' 추가! 월 납입금: {format_currency(monthly)}")
+                if repay_method == METHOD_EQUAL_PAYMENT:
+                    monthly = calc_equal_payment(loan_principal,
+                                                  loan_rate, loan_months)
+                elif repay_method == METHOD_EQUAL_PRINCIPAL:
+                    first   = calc_equal_principal(loan_principal,
+                                                    loan_rate, loan_months, 1)
+                    monthly = first["total"]
+                else:
+                    monthly = calc_bullet(loan_principal, loan_rate)
+
+                new_loan = {
+                    "name":               loan_name,
+                    "lender":             lender,
+                    "repay_method":       repay_method,
+                    "start_date":         str(start_date),
+                    "original_principal": loan_principal,
+                    "current_principal":  loan_principal,
+                    "rate":               loan_rate,
+                    "original_months":    loan_months,
+                    "remaining_months":   loan_months,
+                    "monthly_payment":    monthly,
+                    "prepayments":        []
+                }
+                st.session_state.loans.append(new_loan)
+                if st.session_state.get("current_user"):
+                    save_loan(st.session_state.current_user, new_loan)
+                st.success(f"✅ '{loan_name}' 추가 완료!")
                 st.rerun()
 
     # ── 등록된 대출 목록 ──────────────────────
     if st.session_state.loans:
         for i, loan in enumerate(st.session_state.loans):
-            with st.container():
-                st.markdown(f"---\n#### 🏦 {loan['name']}")
 
-                # 핵심 지표 4개
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("💳 월 납입금",
-                          format_currency(loan["monthly_payment"]))
-                m2.metric("📦 잔여 원금",
-                          format_currency(loan["current_principal"]),
-                          delta=f"-{format_currency(loan['original_principal'] - loan['current_principal'])} 중도상환" 
-                          if loan["original_principal"] != loan["current_principal"] else None,
-                          delta_color="inverse")
-                m3.metric("⏳ 잔여 기간", f"{loan['remaining_months']}개월")
-                total_interest = (loan["monthly_payment"] * loan["remaining_months"]
-                                  - loan["current_principal"])
-                m4.metric("💸 남은 총 이자",
-                          format_currency(max(0, total_interest)))
+            # 현재 날짜 기준 실시간 현황 계산
+            if loan.get("start_date"):
+                status = calc_loan_status(loan)
+                # 세션 값 자동 업데이트
+                loan["current_principal"] = status["current_balance"]
+                loan["remaining_months"]  = status["remaining_months"]
+                loan["monthly_payment"]   = status["current_monthly"]
+            else:
+                status = None
 
-                # ── 중도 상환 입력 ──────────────────
-                with st.expander(f"💰 '{loan['name']}' 중도 상환 입력"):
-                    st.markdown("중도 상환 후 **납입금을 줄일지** vs **기간을 줄일지** 선택하세요.")
+            method_icon = {"원리금균등상환": "📊",
+                           "원금균등상환":   "📉",
+                           "만기일시상환":   "🏁"}.get(
+                loan.get("repay_method", ""), "📊")
 
-                    pp1, pp2 = st.columns(2)
-                    with pp1:
-                        prepay_amount = st.number_input(
-                            "중도 상환 금액 (원)",
-                            min_value=0,
-                            max_value=int(loan["current_principal"]),
-                            step=100000, format="%d",
-                            key=f"prepay_amount_{i}"
+            st.markdown(f"---")
+            st.markdown(
+                f"#### {method_icon} {loan['name']} "
+                f"<span style='font-size:0.8rem; color:#888; "
+                f"background:#f0f0f0; padding:2px 8px; "
+                f"border-radius:10px;'>"
+                f"{loan.get('lender','미입력')} · "
+                f"{loan.get('repay_method','')}</span>",
+                unsafe_allow_html=True
+            )
+
+            # ── 현재 날짜 기준 현황 카드 ──────────
+            if status:
+                elapsed = status["elapsed_months"]
+                remaining = status["remaining_months"]
+                progress = elapsed / loan["original_months"] \
+                           if loan["original_months"] > 0 else 0
+
+                # 진행률 바
+                st.markdown(f"""
+                <div style='margin:8px 0;'>
+                    <div style='display:flex; justify-content:space-between;
+                                font-size:0.85rem; color:#666;'>
+                        <span>🗓️ 시작: {status['start_date']}</span>
+                        <span>📅 오늘: {status['today']}</span>
+                    </div>
+                    <div style='background:#e0e0e0; border-radius:10px;
+                                height:12px; margin:4px 0;'>
+                        <div style='background:linear-gradient(90deg,#1f77b4,#2ecc71);
+                                    width:{min(progress*100, 100):.1f}%;
+                                    height:12px; border-radius:10px;'></div>
+                    </div>
+                    <div style='display:flex; justify-content:space-between;
+                                font-size:0.85rem; color:#666;'>
+                        <span>경과 {elapsed}개월</span>
+                        <span>잔여 {remaining}개월</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # 지표 5개
+                mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+                mc1.metric("💳 이번 달 납입금",
+                           format_currency(status["current_monthly"]))
+                mc2.metric("📦 현재 잔여 원금",
+                           format_currency(status["current_balance"]))
+                mc3.metric("💸 납입한 이자",
+                           format_currency(status["total_paid_interest"]))
+                mc4.metric("✅ 상환한 원금",
+                           format_currency(status["total_paid_principal"]))
+                mc5.metric("⏳ 잔여 기간",
+                           f"{remaining}개월")
+
+            else:
+                # start_date 없는 구버전 대출
+                mc1, mc2, mc3 = st.columns(3)
+                mc1.metric("💳 월 납입금",
+                           format_currency(loan["monthly_payment"]))
+                mc2.metric("📦 잔여 원금",
+                           format_currency(loan["current_principal"]))
+                mc3.metric("⏳ 잔여 기간",
+                           f"{loan['remaining_months']}개월")
+
+            # ── 중도 상환 ──────────────────────────
+            with st.expander(f"💰 중도 상환 입력"):
+                import math as _math
+                pp1, pp2 = st.columns(2)
+                with pp1:
+                    prepay_amount = st.number_input(
+                        "중도 상환 금액 (원)",
+                        min_value=0,
+                        max_value=int(loan["current_principal"]),
+                        step=100000, format="%d",
+                        key=f"prepay_amount_{i}"
+                    )
+                    prepay_date = st.date_input(
+                        "중도 상환일",
+                        value=date.today(),
+                        key=f"prepay_date_{i}"
+                    )
+                with pp2:
+                    prepay_type = st.radio(
+                        "중도 상환 후 선택",
+                        ["💳 납입금 감소 (기간 유지)",
+                         "⏳ 기간 단축 (납입금 유지)"],
+                        key=f"prepay_type_{i}"
+                    )
+                    prepay_fee_rate = st.number_input(
+                        "중도 상환 수수료율 (%)",
+                        min_value=0.0, max_value=5.0,
+                        value=1.2, step=0.1, format="%.1f",
+                        key=f"prepay_fee_{i}"
+                    )
+
+                if prepay_amount > 0:
+                    fee = prepay_amount * prepay_fee_rate / 100
+                    new_p = loan["current_principal"] - prepay_amount
+                    if "납입금 감소" in prepay_type:
+                        new_mp = calc_equal_payment(
+                            new_p, loan["rate"], loan["remaining_months"])
+                        st.success(
+                            f"수수료: **{format_currency(fee)}** | "
+                            f"새 월납입금: **{format_currency(new_mp)}**"
                         )
-                        prepay_date = st.date_input(
-                            "중도 상환일",
-                            value=datetime.now().date(),
-                            key=f"prepay_date_{i}"
-                        )
-                    with pp2:
-                        prepay_type = st.radio(
-                            "중도 상환 후 선택",
-                            ["💳 납입금 감소 (기간 유지)", "⏳ 기간 단축 (납입금 유지)"],
-                            key=f"prepay_type_{i}"
-                        )
-                        prepay_fee_rate = st.number_input(
-                            "중도 상환 수수료율 (%)",
-                            min_value=0.0, max_value=5.0,
-                            value=1.2, step=0.1, format="%.1f",
-                            key=f"prepay_fee_{i}",
-                            help="보통 1~1.5%. 3년 이후 면제되는 경우 많음"
-                        )
-
-                    # 미리보기 계산
-                    if prepay_amount > 0:
-                        fee = prepay_amount * prepay_fee_rate / 100
-                        new_principal = loan["current_principal"] - prepay_amount
-
-                        if "납입금 감소" in prepay_type:
-                            # 기간 유지, 납입금 감소
-                            new_monthly = calc_monthly_payment(
-                                new_principal, loan["rate"], loan["remaining_months"]
-                            )
-                            new_months = loan["remaining_months"]
-                            saved_interest = (
-                                (loan["monthly_payment"] * loan["remaining_months"] - loan["current_principal"])
-                                - (new_monthly * new_months - new_principal)
-                            )
-                            st.success(f"""
-                            **중도 상환 후 예상 결과 (납입금 감소)**
-                            - 수수료: **{format_currency(fee)}** ({prepay_fee_rate}%)
-                            - 새 월 납입금: **{format_currency(new_monthly)}**
-                              (↓ {format_currency(loan['monthly_payment'] - new_monthly)} 감소)
-                            - 잔여 기간: **{new_months}개월** (유지)
-                            - 절약되는 이자: **{format_currency(max(0, saved_interest))}**
-                            """)
-                        else:
-                            # 납입금 유지, 기간 단축
-                            new_monthly = loan["monthly_payment"]
+                    else:
+                        if loan["rate"] > 0:
                             r = loan["rate"] / 100 / 12
-                            if r > 0:
-                                import math
-                                new_months = math.ceil(
-                                    -math.log(1 - new_principal * r / new_monthly)
-                                    / math.log(1 + r)
-                                ) if new_monthly > new_principal * r else 1
-                            else:
-                                new_months = math.ceil(new_principal / new_monthly)
-                            saved_months = loan["remaining_months"] - new_months
-                            saved_interest = (
-                                (loan["monthly_payment"] * loan["remaining_months"] - loan["current_principal"])
-                                - (new_monthly * new_months - new_principal)
-                            )
-                            st.success(f"""
-                            **중도 상환 후 예상 결과 (기간 단축)**
-                            - 수수료: **{format_currency(fee)}** ({prepay_fee_rate}%)
-                            - 새 잔여 기간: **{new_months}개월**
-                              (↓ {saved_months}개월 단축)
-                            - 월 납입금: **{format_currency(new_monthly)}** (유지)
-                            - 절약되는 이자: **{format_currency(max(0, saved_interest))}**
-                            """)
-
-                    # 중도 상환 확정 버튼
-                    if st.button(f"✅ 중도 상환 확정 적용", key=f"apply_prepay_{i}",
-                                 type="primary"):
-                        if prepay_amount <= 0:
-                            st.error("상환 금액을 입력해주세요.")
-                        elif prepay_amount > loan["current_principal"]:
-                            st.error("상환 금액이 잔여 원금을 초과합니다.")
+                            new_m = _math.ceil(
+                                -_math.log(
+                                    1 - new_p * r / loan["monthly_payment"]
+                                ) / _math.log(1 + r)
+                            ) if loan["monthly_payment"] > new_p * r else 1
                         else:
-                            import math
-                            fee = prepay_amount * prepay_fee_rate / 100
-                            new_principal = loan["current_principal"] - prepay_amount
+                            new_m = _math.ceil(
+                                new_p / loan["monthly_payment"]
+                            )
+                        saved = loan["remaining_months"] - new_m
+                        st.success(
+                            f"수수료: **{format_currency(fee)}** | "
+                            f"새 잔여기간: **{new_m}개월** "
+                            f"(↓{saved}개월 단축)"
+                        )
 
-                            # 이력 저장
-                            loan["prepayments"].append({
-                                "date": str(prepay_date),
-                                "amount": prepay_amount,
-                                "fee": fee,
-                                "type": prepay_type,
-                                "before_principal": loan["current_principal"],
-                                "before_monthly": loan["monthly_payment"],
-                                "before_months": loan["remaining_months"]
-                            })
-
-                            # 원금 차감
-                            loan["current_principal"] = new_principal
-
-                            if "납입금 감소" in prepay_type:
-                                loan["monthly_payment"] = calc_monthly_payment(
-                                    new_principal, loan["rate"], loan["remaining_months"]
-                                )
-                                # remaining_months 유지
-                            else:
-                                r = loan["rate"] / 100 / 12
-                                if r > 0 and loan["monthly_payment"] > new_principal * r:
-                                    loan["remaining_months"] = math.ceil(
-                                        -math.log(1 - new_principal * r / loan["monthly_payment"])
-                                        / math.log(1 + r)
-                                    )
-                                else:
-                                    loan["remaining_months"] = math.ceil(
-                                        new_principal / loan["monthly_payment"]
-                                    ) if loan["monthly_payment"] > 0 else 0
-                                # monthly_payment 유지
-
-                            st.success(f"✅ 중도 상환 적용 완료! (수수료 {format_currency(fee)} 포함)")
-                            st.rerun()
-
-                # ── 중도 상환 이력 ──────────────────
-                if loan.get("prepayments"):
-                    with st.expander(f"📜 '{loan['name']}' 중도 상환 이력 "
-                                     f"({len(loan['prepayments'])}건)"):
-                        hist_data = []
-                        for p in loan["prepayments"]:
-                            hist_data.append({
-                                "날짜": p["date"],
-                                "상환 금액": format_currency(p["amount"]),
-                                "수수료": format_currency(p["fee"]),
-                                "방식": "납입금 감소" if "납입금 감소" in p["type"] else "기간 단축",
-                                "상환 전 원금": format_currency(p["before_principal"]),
-                                "상환 전 월납입금": format_currency(p["before_monthly"]),
-                            })
-                        st.dataframe(pd.DataFrame(hist_data),
-                                     use_container_width=True, hide_index=True)
-
-                # ── 상환 스케줄 테이블 ──────────────
-                with st.expander(f"📅 '{loan['name']}' 향후 상환 스케줄 (최대 12개월)"):
-                    schedule = []
-                    bal = loan["current_principal"]
-                    r = loan["rate"] / 100 / 12
-                    mp = loan["monthly_payment"]
-                    show_months = min(loan["remaining_months"], 12)
-
-                    for mo in range(1, show_months + 1):
-                        interest_part = bal * r
-                        principal_part = mp - interest_part
-                        bal = max(0, bal - principal_part)
-                        schedule.append({
-                            "회차": f"{mo}회",
-                            "월 납입금": format_currency(mp),
-                            "이자 부분": format_currency(interest_part),
-                            "원금 부분": format_currency(principal_part),
-                            "잔여 원금": format_currency(bal)
+                if st.button("✅ 중도 상환 확정",
+                             key=f"apply_prepay_{i}", type="primary"):
+                    if prepay_amount > 0:
+                        import math as _math
+                        fee    = prepay_amount * prepay_fee_rate / 100
+                        new_p  = loan["current_principal"] - prepay_amount
+                        loan["prepayments"].append({
+                            "date":             str(prepay_date),
+                            "amount":           prepay_amount,
+                            "fee":              fee,
+                            "type":             prepay_type,
+                            "before_principal": loan["current_principal"],
+                            "before_monthly":   loan["monthly_payment"],
                         })
-                    st.dataframe(pd.DataFrame(schedule),
-                                 use_container_width=True, hide_index=True)
+                        loan["current_principal"] = new_p
+                        if "납입금 감소" in prepay_type:
+                            loan["monthly_payment"] = calc_equal_payment(
+                                new_p, loan["rate"],
+                                loan["remaining_months"])
+                        else:
+                            if loan["rate"] > 0:
+                                r = loan["rate"] / 100 / 12
+                                loan["remaining_months"] = _math.ceil(
+                                    -_math.log(
+                                        1 - new_p * r / loan["monthly_payment"]
+                                    ) / _math.log(1 + r)
+                                )
+                        if loan.get("id") and st.session_state.get("current_user"):
+                            update_loan(loan["id"], loan)
+                        st.rerun()
 
-                # ── 삭제 버튼 ──────────────────────
-                if st.button(f"🗑️ '{loan['name']}' 삭제", key=f"del_loan_{i}"):
-                    st.session_state.loans.pop(i)
-                    st.rerun()
+            # ── 상환 스케줄 ────────────────────────
+            with st.expander(f"📅 상환 스케줄 (향후 12개월)"):
+                schedule = generate_schedule(loan, max_months=12)
+                if schedule:
+                    df_sch = pd.DataFrame(schedule)
+                    for col in ["월 납입금", "원금", "이자", "잔여 원금"]:
+                        df_sch[col] = df_sch[col].apply(
+                            lambda x: f"₩{x:,.0f}")
+                    st.dataframe(df_sch, use_container_width=True,
+                                 hide_index=True)
+
+            # ── 중도 상환 이력 ─────────────────────
+            if loan.get("prepayments"):
+                with st.expander(
+                    f"📜 중도 상환 이력 ({len(loan['prepayments'])}건)"
+                ):
+                    hist = []
+                    for p in loan["prepayments"]:
+                        hist.append({
+                            "날짜":          p["date"],
+                            "상환금액":      format_currency(p["amount"]),
+                            "수수료":        format_currency(p["fee"]),
+                            "방식":          "납입금감소"
+                                             if "납입금" in p["type"]
+                                             else "기간단축",
+                            "상환전 원금":   format_currency(
+                                             p["before_principal"]),
+                        })
+                    st.dataframe(pd.DataFrame(hist),
+                                 use_container_width=True,
+                                 hide_index=True)
+
+            # ── 삭제 ───────────────────────────────
+            if st.button(f"🗑️ '{loan['name']}' 삭제",
+                         key=f"del_loan_{i}"):
+                if loan.get("id") and st.session_state.get("current_user"):
+                    delete_loan(loan["id"])
+                st.session_state.loans.pop(i)
+                st.rerun()
 
         st.divider()
-        st.markdown(f"""
-        <div style='text-align:right; font-size:1.2rem; font-weight:bold;
-                    color:#1f77b4; padding:0.5rem;'>
-            대출 합계: {format_currency(get_total_loans())} / 월
-        </div>
-        """, unsafe_allow_html=True)
-
+        st.markdown(
+            f"<div style='text-align:right; font-size:1.2rem; "
+            f"font-weight:bold; color:#1f77b4;'>"
+            f"대출 합계: {format_currency(get_total_loans())} / 월"
+            f"</div>",
+            unsafe_allow_html=True
+        )
     else:
         st.info("📝 아직 등록된 대출이 없습니다.")
 
