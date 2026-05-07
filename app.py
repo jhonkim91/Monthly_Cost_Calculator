@@ -4,8 +4,187 @@ import plotly.express as px
 import plotly.graph_objects as go
 from io import StringIO
 import json
-from datetime import datetime
-# app.py 상단 — 기존 import 아래에 추가
+import math
+from datetime import date, datetime
+from dateutil.relativedelta import relativedelta
+
+# ─────────────────────────────────────────
+# 대출 계산 상수 & 함수
+# ─────────────────────────────────────────
+METHOD_EQUAL_PAYMENT   = "원리금균등상환"
+METHOD_EQUAL_PRINCIPAL = "원금균등상환"
+METHOD_BULLET          = "만기일시상환"
+REPAY_METHODS = [METHOD_EQUAL_PAYMENT, METHOD_EQUAL_PRINCIPAL, METHOD_BULLET]
+
+LENDER_LIST = [
+    "직접입력",
+    "── 시중은행 ──",
+    "KB국민은행", "신한은행", "하나은행", "우리은행",
+    "NH농협은행", "IBK기업은행", "SC제일은행", "씨티은행",
+    "── 인터넷은행 ──",
+    "카카오뱅크", "케이뱅크", "토스뱅크",
+    "── 저축은행 ──",
+    "SBI저축은행", "OK저축은행", "웰컴저축은행",
+    "── 보험/카드사 ──",
+    "삼성생명", "한화생명", "교보생명",
+    "삼성카드", "현대카드", "롯데카드",
+    "── 정책금융 ──",
+    "주택도시기금", "한국장학재단", "신용보증기금",
+    "── 기타 ──",
+    "새마을금고", "신협", "우체국", "기타"
+]
+
+def calc_equal_payment(principal, annual_rate, months):
+    if months <= 0: return 0.0
+    if annual_rate == 0: return principal / months
+    r = annual_rate / 100 / 12
+    return principal * r * (1 + r) ** months / ((1 + r) ** months - 1)
+
+def calc_equal_principal(principal, annual_rate, months, current_month=1):
+    monthly_principal = principal / months
+    r = annual_rate / 100 / 12
+    remaining = principal - monthly_principal * (current_month - 1)
+    interest = remaining * r
+    return {
+        "monthly_principal": monthly_principal,
+        "interest": interest,
+        "total": monthly_principal + interest,
+        "remaining": remaining - monthly_principal
+    }
+
+def calc_bullet(principal, annual_rate):
+    return principal * (annual_rate / 100 / 12)
+
+def calc_loan_status(loan):
+    start_date = datetime.strptime(loan["start_date"], "%Y-%m-%d").date()
+    today = date.today()
+    diff = relativedelta(today, start_date)
+    elapsed_months = min(
+        diff.years * 12 + diff.months,
+        loan["original_months"]
+    )
+    principal   = loan["original_principal"]
+    annual_rate = loan["rate"]
+    method      = loan.get("repay_method", METHOD_EQUAL_PAYMENT)
+    r           = annual_rate / 100 / 12
+
+    total_paid_principal = 0.0
+    total_paid_interest  = 0.0
+    current_balance      = float(principal)
+
+    prepayments  = sorted(
+        loan.get("prepayments", []), key=lambda x: x["date"]
+    )
+    prepay_index = 0
+
+    for month in range(1, elapsed_months + 1):
+        cur_date = (start_date + relativedelta(months=month)).isoformat()
+        while prepay_index < len(prepayments):
+            pp = prepayments[prepay_index]
+            if pp["date"] <= cur_date:
+                current_balance = max(0, current_balance - pp["amount"])
+                prepay_index += 1
+            else:
+                break
+
+        if current_balance <= 0:
+            break
+
+        remaining_m = loan["original_months"] - month + 1
+
+        if method == METHOD_EQUAL_PAYMENT:
+            if remaining_m <= 0: break
+            mp = calc_equal_payment(current_balance, annual_rate, remaining_m)
+            interest_part  = current_balance * r
+            principal_part = min(mp - interest_part, current_balance)
+
+        elif method == METHOD_EQUAL_PRINCIPAL:
+            principal_part = principal / loan["original_months"]
+            interest_part  = current_balance * r
+
+        else:
+            interest_part  = current_balance * r
+            principal_part = (current_balance
+                              if month == loan["original_months"] else 0.0)
+
+        total_paid_principal += principal_part
+        total_paid_interest  += interest_part
+        current_balance       = max(0, current_balance - principal_part)
+
+    remaining_months = max(0, loan["original_months"] - elapsed_months)
+
+    if current_balance <= 0:
+        current_monthly = 0.0
+    elif method == METHOD_EQUAL_PAYMENT:
+        current_monthly = calc_equal_payment(
+            current_balance, annual_rate, max(1, remaining_months)
+        )
+    elif method == METHOD_EQUAL_PRINCIPAL:
+        current_monthly = (
+            principal / loan["original_months"] + current_balance * r
+        )
+    else:
+        current_monthly = calc_bullet(current_balance, annual_rate)
+
+    return {
+        "elapsed_months":       elapsed_months,
+        "remaining_months":     remaining_months,
+        "current_balance":      current_balance,
+        "total_paid_principal": total_paid_principal,
+        "total_paid_interest":  total_paid_interest,
+        "current_monthly":      current_monthly,
+        "start_date":           start_date,
+        "today":                today,
+    }
+
+def generate_schedule(loan, max_months=None):
+    principal   = loan["current_principal"]
+    annual_rate = loan["rate"]
+    months      = loan["remaining_months"]
+    method      = loan.get("repay_method", METHOD_EQUAL_PAYMENT)
+    r           = annual_rate / 100 / 12
+    if max_months:
+        months = min(months, max_months)
+
+    schedule = []
+    balance  = float(principal)
+    orig_mp  = (float(loan["original_principal"]) / loan["original_months"]
+                if method == METHOD_EQUAL_PRINCIPAL else 0)
+
+    for mo in range(1, months + 1):
+        if balance <= 0: break
+        rem = loan["remaining_months"] - mo + 1
+
+        if method == METHOD_EQUAL_PAYMENT:
+            mp             = calc_equal_payment(balance, annual_rate, max(1, rem))
+            interest_part  = balance * r
+            principal_part = min(mp - interest_part, balance)
+
+        elif method == METHOD_EQUAL_PRINCIPAL:
+            principal_part = orig_mp
+            interest_part  = balance * r
+            mp             = principal_part + interest_part
+
+        else:
+            interest_part  = balance * r
+            principal_part = balance if mo == months else 0.0
+            mp             = interest_part + principal_part
+
+        balance -= principal_part
+        balance  = max(0, balance)
+
+        schedule.append({
+            "회차":     f"{mo}회",
+            "월 납입금": mp,
+            "원금":     principal_part,
+            "이자":     interest_part,
+            "잔여 원금": balance
+        })
+    return schedule
+
+# ─────────────────────────────────────────
+# DB & 인증 import
+# ─────────────────────────────────────────
 from database import (
     load_user, save_income,
     load_loans, save_loan, update_loan, delete_loan,
@@ -14,16 +193,15 @@ from database import (
     load_etc_fixed, save_etc_fixed, delete_etc_fixed,
     delete_all_data
 )
-# app.py 맨 위 import 아래에 추가
 from auth import is_logged_in, get_current_user, logout
 from login_page import show_login_page
 
 # ─────────────────────────────────────────
-# 로그인 게이트 — 로그인 안 됐으면 로그인 페이지만 표시
+# 로그인 게이트
 # ─────────────────────────────────────────
 if not is_logged_in():
     show_login_page()
-    st.stop()  # 로그인 전엔 나머지 앱 실행 안 됨
+    st.stop()
 
 # ─────────────────────────────────────────
 # 이 아래부터는 로그인된 사용자만 접근 가능
