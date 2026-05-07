@@ -56,13 +56,63 @@ def calc_bullet(principal, annual_rate):
     return principal * (annual_rate / 100 / 12)
 
 def calc_loan_status(loan):
-    start_date = datetime.strptime(loan["start_date"], "%Y-%m-%d").date()
-    today = date.today()
-    diff = relativedelta(today, start_date)
-    elapsed_months = min(
-        diff.years * 12 + diff.months,
-        loan["original_months"]
-    )
+    """
+    대출 시작일 + 납입일 기준으로 오늘까지 실제 납입 현황 계산
+    """
+    start_date   = datetime.strptime(loan["start_date"], "%Y-%m-%d").date()
+    payment_day  = int(loan.get("payment_day", 0))  # 매월 납입일 (0이면 미설정)
+    today        = date.today()
+
+    # ── 납입일 기준 첫 납입일 계산 ──────────────
+    if payment_day > 0:
+        # 시작일 다음달 납입일부터 시작
+        first_month = start_date.month + 1
+        first_year  = start_date.year
+        if first_month > 12:
+            first_month = 1
+            first_year += 1
+        # 말일 보정 (예: 2월 30일 → 2월 28일)
+        import calendar
+        last_day = calendar.monthrange(first_year, first_month)[1]
+        actual_day   = min(payment_day, last_day)
+        first_payment = date(first_year, first_month, actual_day)
+    else:
+        # 납입일 미설정 → 시작일 기준 1개월 후
+        first_payment = start_date + relativedelta(months=1)
+
+    # ── 오늘 기준 경과 납입 횟수 계산 ───────────
+    if today < first_payment:
+        # 아직 첫 납입일도 안 됨
+        elapsed_months = 0
+    else:
+        diff = relativedelta(today, first_payment)
+        elapsed_months = diff.years * 12 + diff.months + 1  # +1: 첫납입 포함
+        elapsed_months = min(elapsed_months, loan["original_months"])
+
+    # ── 다음 납입일 계산 ─────────────────────────
+    if payment_day > 0:
+        # 이번달 납입일
+        import calendar
+        last_day   = calendar.monthrange(today.year, today.month)[1]
+        actual_day = min(payment_day, last_day)
+        this_month_payment = date(today.year, today.month, actual_day)
+
+        if today <= this_month_payment:
+            next_payment_date = this_month_payment
+        else:
+            next_m = today.month + 1
+            next_y = today.year
+            if next_m > 12:
+                next_m = 1
+                next_y += 1
+            last_day   = calendar.monthrange(next_y, next_m)[1]
+            actual_day = min(payment_day, last_day)
+            next_payment_date = date(next_y, next_m, actual_day)
+    else:
+        next_payment_date = first_payment + relativedelta(
+            months=elapsed_months)
+
+    # ── 납입 시뮬레이션 ──────────────────────────
     principal   = loan["original_principal"]
     annual_rate = loan["rate"]
     method      = loan.get("repay_method", METHOD_EQUAL_PAYMENT)
@@ -78,7 +128,19 @@ def calc_loan_status(loan):
     prepay_index = 0
 
     for month in range(1, elapsed_months + 1):
-        cur_date = (start_date + relativedelta(months=month)).isoformat()
+        # 해당 회차 납입일 계산
+        if payment_day > 0:
+            import calendar
+            pm = first_payment.month + (month - 1)
+            py = first_payment.year + (pm - 1) // 12
+            pm = ((pm - 1) % 12) + 1
+            last_day   = calendar.monthrange(py, pm)[1]
+            actual_day = min(payment_day, last_day)
+            cur_date   = date(py, pm, actual_day).isoformat()
+        else:
+            cur_date = (start_date + relativedelta(months=month)).isoformat()
+
+        # 중도상환 반영
         while prepay_index < len(prepayments):
             pp = prepayments[prepay_index]
             if pp["date"] <= cur_date:
@@ -93,8 +155,10 @@ def calc_loan_status(loan):
         remaining_m = loan["original_months"] - month + 1
 
         if method == METHOD_EQUAL_PAYMENT:
-            if remaining_m <= 0: break
-            mp = calc_equal_payment(current_balance, annual_rate, remaining_m)
+            if remaining_m <= 0:
+                break
+            mp             = calc_equal_payment(
+                current_balance, annual_rate, remaining_m)
             interest_part  = current_balance * r
             principal_part = min(mp - interest_part, current_balance)
 
@@ -102,7 +166,7 @@ def calc_loan_status(loan):
             principal_part = principal / loan["original_months"]
             interest_part  = current_balance * r
 
-        else:
+        else:  # 만기일시
             interest_part  = current_balance * r
             principal_part = (current_balance
                               if month == loan["original_months"] else 0.0)
@@ -113,16 +177,25 @@ def calc_loan_status(loan):
 
     remaining_months = max(0, loan["original_months"] - elapsed_months)
 
+    # ── 이번달 납입 여부 ─────────────────────────
+    import calendar
+    if payment_day > 0:
+        last_day   = calendar.monthrange(today.year, today.month)[1]
+        actual_day = min(payment_day, last_day)
+        this_payment = date(today.year, today.month, actual_day)
+        paid_this_month = today >= this_payment
+    else:
+        paid_this_month = None  # 알 수 없음
+
+    # ── 현재 월 납입금 ───────────────────────────
     if current_balance <= 0:
         current_monthly = 0.0
     elif method == METHOD_EQUAL_PAYMENT:
         current_monthly = calc_equal_payment(
-            current_balance, annual_rate, max(1, remaining_months)
-        )
+            current_balance, annual_rate, max(1, remaining_months))
     elif method == METHOD_EQUAL_PRINCIPAL:
         current_monthly = (
-            principal / loan["original_months"] + current_balance * r
-        )
+            principal / loan["original_months"] + current_balance * r)
     else:
         current_monthly = calc_bullet(current_balance, annual_rate)
 
@@ -135,7 +208,12 @@ def calc_loan_status(loan):
         "current_monthly":      current_monthly,
         "start_date":           start_date,
         "today":                today,
+        "first_payment_date":   first_payment,
+        "next_payment_date":    next_payment_date,
+        "paid_this_month":      paid_this_month,
+        "payment_day":          payment_day,
     }
+
 
 def generate_schedule(loan, max_months=None):
     principal   = loan["current_principal"]
@@ -591,19 +669,33 @@ with tab2:
             else:
                 lender = lender_select
 
-        # 2행 — 상환방식 / 대출 시작일
-        r2c1, r2c2 = st.columns(2)
-        with r2c1:
-            repay_method = st.selectbox(
-                "상환 방식",
-                REPAY_METHODS,
-                key="repay_method",
-                help="원리금균등: 매월 동일 납입 | 원금균등: 초기 납입 높고 점점 감소 | 만기일시: 매월 이자만, 만기에 원금 전액"
-            )
-        with r2c2:
-            start_date = st.date_input("대출 시작일",
-                                        value=date.today(),
-                                        key="loan_start_date")
+# 2행 — 상환방식 / 대출 시작일 / 매월 납입일
+r2c1, r2c2, r2c3 = st.columns(3)
+with r2c1:
+    repay_method = st.selectbox(
+        "상환 방식", REPAY_METHODS, key="repay_method",
+        help="원리금균등: 매월 동일 | 원금균등: 초기 높고 감소 | 만기일시: 이자만 납입"
+    )
+with r2c2:
+    start_date = st.date_input(
+        "대출 시작일 (실행일)",
+        value=date.today(),
+        key="loan_start_date"
+    )
+with r2c3:
+    payment_day = st.number_input(
+        "매월 납입일",
+        min_value=1, max_value=31,
+        value=25, step=1,
+        key="payment_day",
+        help="매월 실제 납입하는 날짜 (예: 10, 25)"
+    )
+    st.caption(f"💡 첫 납입일: {
+        (date(start_date.year + (start_date.month) // 12,
+              (start_date.month % 12) + 1, 
+              min(payment_day, 28))
+        ).strftime('%Y년 %m월 %d일')
+    }")
 
         # 3행 — 원금 / 금리 / 기간
         r3c1, r3c2, r3c3 = st.columns(3)
@@ -675,6 +767,7 @@ with tab2:
                     "lender":             lender,
                     "repay_method":       repay_method,
                     "start_date":         str(start_date),
+                    "payment_day":        int(payment_day),
                     "original_principal": loan_principal,
                     "current_principal":  loan_principal,
                     "rate":               loan_rate,
@@ -721,32 +814,78 @@ with tab2:
 
             # ── 현재 날짜 기준 현황 카드 ──────────
             if status:
-                elapsed = status["elapsed_months"]
-                remaining = status["remaining_months"]
-                progress = elapsed / loan["original_months"] \
-                           if loan["original_months"] > 0 else 0
+    elapsed   = status["elapsed_months"]
+    remaining = status["remaining_months"]
+    progress  = elapsed / loan["original_months"] \
+                if loan["original_months"] > 0 else 0
 
-                # 진행률 바
-                st.markdown(f"""
-                <div style='margin:8px 0;'>
-                    <div style='display:flex; justify-content:space-between;
-                                font-size:0.85rem; color:#666;'>
-                        <span>🗓️ 시작: {status['start_date']}</span>
-                        <span>📅 오늘: {status['today']}</span>
-                    </div>
-                    <div style='background:#e0e0e0; border-radius:10px;
-                                height:12px; margin:4px 0;'>
-                        <div style='background:linear-gradient(90deg,#1f77b4,#2ecc71);
-                                    width:{min(progress*100, 100):.1f}%;
-                                    height:12px; border-radius:10px;'></div>
-                    </div>
-                    <div style='display:flex; justify-content:space-between;
-                                font-size:0.85rem; color:#666;'>
-                        <span>경과 {elapsed}개월</span>
-                        <span>잔여 {remaining}개월</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+    # ── 납입일 알림 카드 ────────────────────────
+    next_pay  = status["next_payment_date"]
+    days_left = (next_pay - status["today"]).days
+    paid_this = status["paid_this_month"]
+
+    if days_left == 0:
+        pay_msg   = "🔴 오늘이 납입일입니다!"
+        pay_color = "#e74c3c"
+    elif days_left <= 3:
+        pay_msg   = f"🟡 납입일까지 {days_left}일 남았습니다"
+        pay_color = "#f39c12"
+    elif paid_this is True:
+        pay_msg   = f"✅ 이번달 납입 완료 ({next_pay.strftime('%m월 %d일')} 예정)"
+        pay_color = "#27ae60"
+    else:
+        pay_msg   = f"📅 다음 납입일: {next_pay.strftime('%Y년 %m월 %d일')} ({days_left}일 후)"
+        pay_color = "#1f77b4"
+
+    st.markdown(f"""
+    <div style='background:{pay_color}15; border-left: 4px solid {pay_color};
+                padding: 10px 16px; border-radius: 8px; margin: 8px 0;
+                display:flex; justify-content:space-between; align-items:center;'>
+        <span style='color:{pay_color}; font-weight:bold; font-size:0.95rem;'>
+            {pay_msg}
+        </span>
+        <span style='color:#888; font-size:0.85rem;'>
+            매월 {status['payment_day']}일 납입 · 
+            첫 납입: {status['first_payment_date'].strftime('%Y.%m.%d')}
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 진행률 바 ────────────────────────────────
+    st.markdown(f"""
+    <div style='margin:8px 0;'>
+        <div style='display:flex; justify-content:space-between;
+                    font-size:0.85rem; color:#666;'>
+            <span>🗓️ 대출 실행일: {status['start_date']}</span>
+            <span>📅 오늘: {status['today']}</span>
+        </div>
+        <div style='background:#e0e0e0; border-radius:10px;
+                    height:12px; margin:4px 0;'>
+            <div style='background:linear-gradient(90deg,#1f77b4,#2ecc71);
+                        width:{min(progress*100, 100):.1f}%;
+                        height:12px; border-radius:10px;'></div>
+        </div>
+        <div style='display:flex; justify-content:space-between;
+                    font-size:0.85rem; color:#666;'>
+            <span>✅ {elapsed}회 납입 완료</span>
+            <span>⏳ {remaining}회 남음</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 지표 5개 ─────────────────────────────────
+    mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+    mc1.metric("💳 이번달 납입금",
+               format_currency(status["current_monthly"]))
+    mc2.metric("📦 현재 잔여 원금",
+               format_currency(status["current_balance"]))
+    mc3.metric("💸 납입한 이자",
+               format_currency(status["total_paid_interest"]))
+    mc4.metric("✅ 상환한 원금",
+               format_currency(status["total_paid_principal"]))
+    mc5.metric("⏳ 잔여 기간",
+               f"{remaining}개월")
+
 
                 # 지표 5개
                 mc1, mc2, mc3, mc4, mc5 = st.columns(5)

@@ -61,6 +61,7 @@ def save_loan(user_name: str, loan: dict):
         "lender":             loan.get("lender", ""),
         "repay_method":       loan.get("repay_method", "원리금균등상환"),
         "start_date":         loan.get("start_date", ""),
+        "payment_day":        int(loan.get("payment_day", 25)),  # ← 추가
         "original_principal": int(loan["original_principal"]),
         "current_principal":  int(loan["current_principal"]),
         "rate":               float(loan["rate"]),
