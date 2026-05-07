@@ -384,7 +384,6 @@ def get_grand_total():
 # 사이드바 — 월 소득 입력
 # ─────────────────────────────────────────
 with st.sidebar:
-    # 로그인 정보 표시
     st.markdown("## 👤 내 계정")
     st.success(f"✅ {get_current_user()}")
 
@@ -393,58 +392,29 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    # ... 이하 기존 사이드바 코드 유지
-    st.markdown("## 🔐 사용자")
 
-    input_name = st.text_input(
-        "사용자 이름",
-        placeholder="예: hong123",
-        value=st.session_state.current_user or ""
-    )
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        if st.button("📂 불러오기", type="primary", use_container_width=True):
-            if input_name.strip():
-                st.session_state.current_user = input_name.strip()
-                st.session_state.user_loaded  = False  # DB 재로드 트리거
-                st.rerun()
-            else:
-                st.error("이름을 입력해주세요!")
-    with col_b:
-        if st.button("💾 저장", use_container_width=True):
-            if st.session_state.current_user:
-                save_income(st.session_state.current_user,
-                            st.session_state.income)
-                st.success("저장 완료!")
-            else:
-                st.warning("먼저 불러오기를 눌러주세요.")
-
-    if st.session_state.current_user:
-        st.success(f"✅ {st.session_state.current_user}")
-    else:
-        st.info("이름 입력 후 불러오기를 누르세요")
     st.markdown("## 👤 기본 정보")
     name = st.text_input("이름 (선택)", placeholder="홍길동")
     month = st.selectbox("기준 월", [f"{i}월" for i in range(1, 13)],
                          index=datetime.now().month - 1)
     year = st.number_input("기준 연도", min_value=2020, max_value=2030,
                            value=datetime.now().year)
-    
+
     st.divider()
     st.markdown("## 💵 월 소득")
     st.session_state.income = st.number_input(
-        "세후 월 소득 (원)", min_value=0, value=st.session_state.income,
+        "세후 월 소득 (원)", min_value=0,
+        value=st.session_state.income,
         step=10000, format="%d"
     )
-    
-    total = get_grand_total()
+
+    total  = get_grand_total()
     income = st.session_state.income
-    ratio = (total / income * 100) if income > 0 else 0
-    
+    ratio  = (total / income * 100) if income > 0 else 0
+
     st.divider()
     st.markdown("## 📊 빠른 요약")
-    
+
     color = "danger" if ratio > 60 else "warning" if ratio > 40 else "success"
     st.markdown(f"""
     <div class="metric-card">
@@ -452,7 +422,7 @@ with st.sidebar:
         <div class="metric-value">{format_currency(total)}</div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     if income > 0:
         st.markdown(f"""
         <div class="metric-card">
@@ -460,13 +430,14 @@ with st.sidebar:
             <div class="metric-value {color}">{ratio:.1f}%</div>
         </div>
         """, unsafe_allow_html=True)
-        
+
         if ratio > 60:
             st.error("⚠️ 고정비 비율이 60%를 초과했습니다!")
         elif ratio > 40:
             st.warning("💡 고정비 비율이 높습니다. 점검이 필요해요.")
         else:
             st.success("✅ 고정비 비율이 양호합니다!")
+
 
 # ─────────────────────────────────────────
 # 메인 헤더
